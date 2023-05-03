@@ -1,3 +1,0 @@
-[submodule "nodemcu-httpserver"]
-	path = nodemcu-httpserver
-	url = https://github.com/marcoskirsch/nodemcu-httpserver.git
