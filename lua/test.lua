@@ -2,6 +2,7 @@
 local softuart = require "softuart"
 local net = require "net"
 local uart = require "uart"
+local gdbstub = require "gdbstub"
 
 dofile("utils.lua")
 tcp_port = 1234
@@ -16,19 +17,19 @@ function serial_init()
     suart = softuart.setup(9600, TX, RX)
     local server = net.createServer(net.TCP, 360)
     local global_sck = nil
-    -- uart.alt(1)
-    -- uart.setup(0, 115200, 8, uart.PARITY_NONE, uart.STOPBITS_1, 0)
+    uart.alt(1)
+    uart.setup(0, 115200, 8, uart.PARITY_NONE, uart.STOPBITS_1, 0)
     server:listen(tcp_port, function(sck)
         global_sck = sck
         sck:on("receive", function(_, pl)
-            -- print("TCP_R " .. pl .. "\n")
-            suart:write(tostring(pl) .. "\n")
+            print("TCP_R " .. tostring(pl) .. "\n")
+            uart:write(tostring(pl) .. "\n")
         end)
     end)
-    suart:on("data", "E", function(data)
-        -- print("SUART_R " .. data)
+    uart:on("data", 1, function(data)
+        print("SUART_R " .. data)
         if global_sck ~= nil then
-            -- print("SUART_S " .. data)
+            print("SUART_S " .. data)
             global_sck:send(tostring(data))
         end
     end)
@@ -36,3 +37,4 @@ end
 
 print("Serial TEST")
 serial_init()
+print("Serial TEST2")

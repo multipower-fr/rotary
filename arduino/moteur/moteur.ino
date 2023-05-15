@@ -6,7 +6,7 @@
 #define MAXLEN 64
 
 // Defaults
-#define SOFT_UART_BAUD 300
+#define SOFT_UART_BAUD 115200
 #define USB_BAUD 9600
 #define DEFAULT_SPEED MAX_SPEED
 
@@ -30,7 +30,7 @@ int ctrl_commande, ctrl_vitesse, ctrl_steps, command_changed, sens, pos_steps, m
 Stepper StepperMotor(STEPS_PER_REV, IN1, IN3, IN2, IN4);
 
 void parse() {
-#ifdef DEBUG
+#ifdef RUN
     while (Serial.available() > 0) {
         // Format :
         // ctrl_commande,ctrl_angle,ctrl_vitesse,ctrl_steps\n
@@ -61,41 +61,42 @@ void parse() {
         }
 }
 #else
-    while (Serial1.available() > 0) {
-        // Format :
-        // ctrl_commande,ctrl_angle,ctrl_vitesse,ctrl_steps\n
-        // Parse le CSV
-        ctrl_commande = Serial1.parseInt();
-        ctrl_angle = Serial1.parseFloat();
-        ctrl_vitesse = Serial1.parseInt();
-        ctrl_steps = Serial1.parseInt();
-
-        if (Serial1.read() == '\n') {
-            // 4 commandes seulement :
-            // setPos (0)
-            // setStep (1)
-            // setZero (2)
-            // setSpeed (3)
-            // getPos (4)
-            // getMov (5)
-            ctrl_commande = constrain(ctrl_commande, 0, 5);
-            // Contraindre l'angle
-            ctrl_angle = constrain(ctrl_angle, -359.0, 359.0);
-            if (ctrl_angle < 0.0) {
-                // Ramener l'ctrl_angle en valeur absolue
-                ctrl_angle = 360 + ctrl_angle;
-            }
-            // Empêcher sur-vitesse
-            ctrl_vitesse = constrain(ctrl_angle, 1, MAX_SPEED);
-            // Flag de commande
-            command_changed = 1;
+    if (digitalRead(2) == HIGH) {
+        while (Serial1.available() > 0) {
+            // Format :
+            // ctrl_commande,ctrl_angle,ctrl_vitesse,ctrl_steps\n
+            // Parse le CSV
+            ctrl_commande = Serial1.parseInt();
+            ctrl_angle = Serial1.parseFloat();
+            ctrl_vitesse = Serial1.parseInt();
+            ctrl_steps = Serial1.parseInt();
+            if (Serial1.read() == '\n') {
+                // 4 commandes seulement :
+                // setPos (0)
+                // setStep (1)
+                // setZero (2)
+                // setSpeed (3)
+                // getPos (4)
+                // getMov (5)
+                ctrl_commande = constrain(ctrl_commande, 0, 5);
+                // Contraindre l'angle
+                ctrl_angle = constrain(ctrl_angle, -359.0, 359.0);
+                if (ctrl_angle < 0.0) {
+                    // Ramener l'ctrl_angle en valeur absolue
+                    ctrl_angle = 360 + ctrl_angle;
+                }
+                // Empêcher sur-vitesse
+                ctrl_vitesse = constrain(ctrl_angle, 1, MAX_SPEED);
+                // Flag de commande
+                command_changed = 1;
 #ifndef RELEASE
-            Serial.println(ctrl_angle);
-            Serial.println(ctrl_commande);
+                Serial.println(ctrl_angle);
+                Serial.println(ctrl_commande);
 #endif
+            }
         }
-    }
 #endif
+    }
 }
 
 void setPos() {
@@ -172,29 +173,17 @@ void getPos() {
     byte writeBuf[14];
     char floatBuf[MAXLEN];
     String printString;
-    if (pos_steps > 0) {
-        pos_deg = pos_steps / STEPS_PER_DEG;
-        // Printf Arduino ne supporte pas les floats
+    pos_deg = (pos_steps > 0) ? pos_steps / STEPS_PER_DEG : 0.0;
+    // Printf Arduino ne supporte pas les floats
 #ifdef FLOAT_SPF
-        snprintf(sentBuf, sizeof(sentBuf), "%d,%03.1f,%04d\n", ctrl_commande, pos_deg, pos_steps);
+    snprintf(sentBuf, sizeof(sentBuf), "%d,%03.1f,%04d\n", ctrl_commande, pos_deg, pos_steps);
 #else
-        dtostrf(pos_deg, 5, 1, floatBuf);
-        snprintf(sentBuf, sizeof(sentBuf), "%d,%s,%04d;", ctrl_commande, floatBuf, pos_steps);
+    dtostrf(pos_deg, 5, 1, floatBuf);
+    snprintf(sentBuf, sizeof(sentBuf), "%d,%s,%04dE", ctrl_commande, floatBuf, pos_steps);
 #endif
-        printString = String(sentBuf);
-        printString.getBytes(writeBuf, printString.length() + 1);
-    }
-    else {
-        pos_deg = 0.0;
-#ifdef FLOAT_SPF
-        snprintf(sentBuf, sizeof(sentBuf), "%d,%03.1f,%04d\n", ctrl_commande, pos_deg, pos_steps);
-#else
-        dtostrf(pos_deg, 5, 1, floatBuf);
-        snprintf(sentBuf, sizeof(sentBuf), "%d,%s,%04d;", ctrl_commande, floatBuf, pos_steps);
-#endif
-        printString = String(sentBuf);
-        printString.getBytes(writeBuf, printString.length() + 1);
-    }
+    printString = String(sentBuf);
+    printString.replace(" ", "A");
+    printString.getBytes(writeBuf, printString.length() + 1);
 #ifndef RELEASE
     Serial.println(printString);
 #else
@@ -208,7 +197,7 @@ void getPos() {
 void getMov() {
     char sentBuf[MAXLEN];
     String printString;
-    sprintf(sentBuf, "5,%07d", moving);
+    sprintf(sentBuf, "%04d", moving);
     printString = String(sentBuf);
     Serial1.println(printString);
 }
@@ -231,6 +220,7 @@ void setup() {
     Serial1.flush();
     // Initialise la position 0
     pos_steps = 0;
+    pinMode(2, INPUT_PULLUP);
 }
 
 void loop() {

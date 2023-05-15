@@ -5,9 +5,14 @@ dofile("utils.lua")
 
 -- Port TCP utilise pour le socket
 tcp_port = 1234
+
+-- TX et RX pour l'UART Arduino
+TX, RX = 6, 7
+
 to_send_fifo = (require "fifo").new()
 local net = require "net"
 local softuart = require "softuart"
+local uart = require "uart"
 
 -- Classe pour le parser de commande
 CommandParser = {
@@ -179,6 +184,7 @@ end
 --- TODO: Joindre ACK avec valeur
 --- Récupérer la position
 function CommandParser:getPos()
+    print(string.format("%d,0.0,0,0\n", self.ran_command["value"]))
     suart:write(string.format("%d,0.0,0,0\n", self.ran_command["value"]))
     self.suart_command = nil
     self.return_message = nil
@@ -186,6 +192,8 @@ end
 
 function CommandParser:getMov()
     suart:write(string.format("%d,0.0,0,0\n", self.ran_command["value"]))
+    self.suart_command = nil
+    self.return_message = nil
 end
 
 --- Fonction callback a la reception TCP
@@ -239,13 +247,50 @@ end
 
 --- Open the TCP socket on port tcp_port
 function open()
-    server = net.createServer(net.TCP, 360)
-    if server then
-        print("Established")
-        server:listen(tcp_port, function(sck, payload)
-            sck:on("receive", tcp_receiver)
+    -- Variables d'initialisation
+    local server = net.createServer(net.TCP, 360)
+    suart = softuart.setup(9600, TX, RX)
+    local global_sck = nil
+    -- Utilise les pins GPIO TX et RX
+    uart.alt(1)
+    uart.setup(0, 9600, 8, uart.PARITY_NONE, uart.STOPBITS_1, 0)
+
+    print("Established")
+    -- Initier le callback
+    server:listen(tcp_port, function(sck)
+        global_sck = sck
+        sck:on("receive", function(sock, payload)
+            print(payload)
+            -- Initialiser le parser de commandes
+            cp = CommandParser:new(nil, payload)
+            -- Si la commande est -3, une commande inconnue a ete passee
+            if cp:receive()["value"] == -3 then
+                sock:send("ERR")
+                return true
+            end 
+            local return_packet = cp:extract_args()
+            if return_packet["error"] or return_packet["suart_command"] == nil then
+                sock:send(return_packet["return_message"])
+            elseif return_packet["return_message"] ~= nil then
+                sock:send(return_packet["return_message"])
+                suart:write(return_packet["suart_command"] .. "\n")
+            end
+            return return_packet["error"]
         end)
-    end
+    end)
+    uart:on("data", 1, function(data)
+        print(data .. "SUART_R")
+        if startswith(data, tostring(4)) then
+            local cmd_name = "getPos"
+            print(data)
+            pos_recieved = true
+            pos_deg = tonumber(split(data, ",")[1])
+            pos_steps = tonumber(split(data, ",")[2])
+            if global_sck ~= nil then
+                global_sck:send(string.format("%sACK;%.1f;%d", cmd_name, pos_deg, pos_steps))
+            end
+        end
+    end)
 end
 
 --- Initialiser la connexion serie de controle
@@ -253,9 +298,8 @@ end
 function serial_init()
     -- RX1 ARDUINO <-> PIN 5 CARTE COMM
     -- TX1 ARDUINO <-> PIN 4 CARTE COMM
-    local TX, RX = 1, 2
     suart = softuart.setup(9600, TX, RX)
-    suart:on("data", 9, function(data)
+    suart:on("data", 13, function(data)
         if startswith(data, tostring(4)) then
             local cmd_name = "getPos"
             print(data)
@@ -267,5 +311,5 @@ function serial_init()
     end)
 end
 
-serial_init()
+-- serial_init()
 open()

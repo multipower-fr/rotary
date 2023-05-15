@@ -1,4 +1,5 @@
 target/
+arduino/build/
 .vscode/*
 !.vscode/arduino.json
 lua/credentials.lua

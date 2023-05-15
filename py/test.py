@@ -56,11 +56,27 @@ class Comm:
             # Récupérer les données du serveur dans un buffer de 1024 bytes
             response = str(sock.recv(1024), "utf-8")
             print(f"Recu: {response}")
-
+    def client2(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            # Connection au socket demandé
+            sock.connect((self.ip, self.port))
+            print(f"Connecte a {self.ip}:{self.port}")
+            while True:
+                try:
+                    # Envoyer le message encodé en UTF-8
+                    message = input("MESSAGE :")
+                    if message != "":
+                        print(message)
+                        sock.sendall(bytes(message, "utf-8"))
+                    # Récupérer les données du serveur dans un buffer de 1024 bytes
+                    response = str(sock.recv(1024), "utf-8")
+                    print(f"Recu: {response}")
+                except KeyboardInterrupt:
+                    break
 
 def main():
     client = Comm()
-    client.client()
+    client.client2()
 
 
 if __name__ == "__main__":

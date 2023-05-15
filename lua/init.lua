@@ -15,7 +15,7 @@ function startup()
         if file.open("test.lua") == nil then
             dofile("control.lua")
         else
-            dofile("test.lua")
+            -- dofile("test.lua")
         end
     end
 end
