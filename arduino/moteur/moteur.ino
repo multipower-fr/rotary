@@ -231,9 +231,6 @@ void setup() {
     Serial1.flush();
     // Initialise la position 0
     pos_steps = 0;
-    for (int i = 0; i < 25; i++) {
-        Serial1.print("A");
-    }
 }
 
 void loop() {
