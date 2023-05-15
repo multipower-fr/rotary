@@ -25,7 +25,7 @@ function serial_init()
             suart:write(tostring(pl) .. "\n")
         end)
     end)
-    suart:on("data", 2, function(data)
+    suart:on("data", "E", function(data)
         -- print("SUART_R " .. data)
         if global_sck ~= nil then
             -- print("SUART_S " .. data)
