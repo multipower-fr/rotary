@@ -8,6 +8,5 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1.28.1", features = ["full"] }
 ringbuf = "0.3.3"
-futures = "0.3.28"
 lazy_static = "1.4.0"
-rustyline-async = "0.3.1"
+rustyline = "11.0.0"
