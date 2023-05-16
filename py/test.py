@@ -69,8 +69,8 @@ class Comm:
                         print(message)
                         sock.sendall(bytes(message, "utf-8"))
                     # Récupérer les données du serveur dans un buffer de 1024 bytes
-                    response = str(sock.recv(1024), "utf-8")
-                    print(f"Recu: {response}")
+                    # response = str(sock.recv(1024), "utf-8")
+                    # print(f"Recu: {response}")
                 except KeyboardInterrupt:
                     break
 

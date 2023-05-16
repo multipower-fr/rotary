@@ -8,6 +8,6 @@
         ]
     ],
     "programmer": "avrispmkii",
-    "sketch": "arduino\\test-mega\\test-mega.ino",
+    "sketch": "arduino\\moteur\\moteur.ino",
     "output": ".\\arduino\\build"
 }

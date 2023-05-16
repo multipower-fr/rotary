@@ -7,12 +7,11 @@ dofile("utils.lua")
 tcp_port = 1234
 
 -- TX et RX pour l'UART Arduino
-TX, RX = 6, 7
+TX, RX = 2, nil
 
 to_send_fifo = (require "fifo").new()
 local net = require "net"
 local softuart = require "softuart"
-local uart = require "uart"
 
 -- Classe pour le parser de commande
 CommandParser = {
@@ -181,6 +180,7 @@ function CommandParser:setSpeed()
     end
 end
 
+--[=====[
 --- TODO: Joindre ACK avec valeur
 --- Récupérer la position
 function CommandParser:getPos()
@@ -244,21 +244,17 @@ function tcp_receiver(sck, payload)
     return return_packet["error"]
 
 end
+--]=====]
 
 --- Open the TCP socket on port tcp_port
 function open()
     -- Variables d'initialisation
     local server = net.createServer(net.TCP, 360)
     suart = softuart.setup(9600, TX, RX)
-    local global_sck = nil
-    -- Utilise les pins GPIO TX et RX
-    uart.alt(1)
-    uart.setup(0, 9600, 8, uart.PARITY_NONE, uart.STOPBITS_1, 0)
 
     print("Established")
     -- Initier le callback
     server:listen(tcp_port, function(sck)
-        global_sck = sck
         sck:on("receive", function(sock, payload)
             print(payload)
             -- Initialiser le parser de commandes
@@ -277,19 +273,6 @@ function open()
             end
             return return_packet["error"]
         end)
-    end)
-    uart:on("data", 1, function(data)
-        print(data .. "SUART_R")
-        if startswith(data, tostring(4)) then
-            local cmd_name = "getPos"
-            print(data)
-            pos_recieved = true
-            pos_deg = tonumber(split(data, ",")[1])
-            pos_steps = tonumber(split(data, ",")[2])
-            if global_sck ~= nil then
-                global_sck:send(string.format("%sACK;%.1f;%d", cmd_name, pos_deg, pos_steps))
-            end
-        end
     end)
 end
 

@@ -6,7 +6,7 @@
 #define MAXLEN 64
 
 // Defaults
-#define SOFT_UART_BAUD 115200
+#define SOFT_UART_BAUD 9600
 #define USB_BAUD 9600
 #define DEFAULT_SPEED MAX_SPEED
 
@@ -61,43 +61,41 @@ void parse() {
         }
 }
 #else
-    if (digitalRead(2) == HIGH) {
-        while (Serial1.available() > 0) {
-            // Format :
-            // ctrl_commande,ctrl_angle,ctrl_vitesse,ctrl_steps\n
-            // Parse le CSV
-            ctrl_commande = Serial1.parseInt();
-            ctrl_angle = Serial1.parseFloat();
-            ctrl_vitesse = Serial1.parseInt();
-            ctrl_steps = Serial1.parseInt();
-            if (Serial1.read() == '\n') {
-                // 4 commandes seulement :
-                // setPos (0)
-                // setStep (1)
-                // setZero (2)
-                // setSpeed (3)
-                // getPos (4)
-                // getMov (5)
-                ctrl_commande = constrain(ctrl_commande, 0, 5);
-                // Contraindre l'angle
-                ctrl_angle = constrain(ctrl_angle, -359.0, 359.0);
-                if (ctrl_angle < 0.0) {
-                    // Ramener l'ctrl_angle en valeur absolue
-                    ctrl_angle = 360 + ctrl_angle;
-                }
-                // Empêcher sur-vitesse
-                ctrl_vitesse = constrain(ctrl_angle, 1, MAX_SPEED);
-                // Flag de commande
-                command_changed = 1;
-#ifndef RELEASE
-                Serial.println(ctrl_angle);
-                Serial.println(ctrl_commande);
-#endif
+    while (Serial1.available() > 0) {
+        // Format :
+        // ctrl_commande,ctrl_angle,ctrl_vitesse,ctrl_steps\n
+        // Parse le CSV
+        ctrl_commande = Serial1.parseInt();
+        ctrl_angle = Serial1.parseFloat();
+        ctrl_vitesse = Serial1.parseInt();
+        ctrl_steps = Serial1.parseInt();
+        if (Serial1.read() == '\n') {
+            // 4 commandes seulement :
+            // setPos (0)
+            // setStep (1)
+            // setZero (2)
+            // setSpeed (3)
+            // getPos (4)
+            // getMov (5)
+            ctrl_commande = constrain(ctrl_commande, 0, 5);
+            // Contraindre l'angle
+            ctrl_angle = constrain(ctrl_angle, -359.0, 359.0);
+            if (ctrl_angle < 0.0) {
+                // Ramener l'ctrl_angle en valeur absolue
+                ctrl_angle = 360 + ctrl_angle;
             }
+            // Empêcher sur-vitesse
+            ctrl_vitesse = constrain(ctrl_angle, 1, MAX_SPEED);
+            // Flag de commande
+            command_changed = 1;
+#ifndef RELEASE
+            Serial.println(ctrl_angle);
+            Serial.println(ctrl_commande);
+#endif
         }
+    }
 #endif
     }
-}
 
 void setPos() {
     int shifted_steps_dest, ctrl_angle_steps, steps_to_move, oneeighty;
@@ -131,9 +129,6 @@ void setPos() {
                 if (ctrl_angle_steps < oneeighty) {
                     shifted_steps_dest = (2048 - pos_steps) + ctrl_angle_steps;
                 }
-                /*else if (ctrl_angle_steps > pos_steps) {
-                    shifted_steps_dest = ctrl_angle_steps - pos_steps;
-                }*/
                 else {
                     shifted_steps_dest = ctrl_angle_steps - pos_steps;
                 }
@@ -182,7 +177,7 @@ void getPos() {
     snprintf(sentBuf, sizeof(sentBuf), "%d,%s,%04dE", ctrl_commande, floatBuf, pos_steps);
 #endif
     printString = String(sentBuf);
-    printString.replace(" ", "A");
+    printString.replace(" ", "0");
     printString.getBytes(writeBuf, printString.length() + 1);
 #ifndef RELEASE
     Serial.println(printString);
@@ -220,7 +215,6 @@ void setup() {
     Serial1.flush();
     // Initialise la position 0
     pos_steps = 0;
-    pinMode(2, INPUT_PULLUP);
 }
 
 void loop() {
@@ -242,10 +236,10 @@ void loop() {
             setSpeed();
             break;
         case 4:
-            getPos();
+            // getPos();
             break;
         case 5:
-            getMov();
+            // getMov();
             break;
         }
         command_changed = 0;

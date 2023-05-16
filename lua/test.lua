@@ -13,25 +13,14 @@ recv = nil
 function serial_init()
     -- RX1 ARDUINO <-> PIN 5 CARTE COMM
     -- TX1 ARDUINO <-> PIN 4 CARTE COMM
-    local TX, RX = 6, 7
-    suart = softuart.setup(9600, TX, RX)
+    local TX = 2
+    local suart = softuart.setup(9600, TX, nil)
     local server = net.createServer(net.TCP, 360)
-    local global_sck = nil
-    uart.alt(1)
-    uart.setup(0, 115200, 8, uart.PARITY_NONE, uart.STOPBITS_1, 0)
     server:listen(tcp_port, function(sck)
-        global_sck = sck
         sck:on("receive", function(_, pl)
             print("TCP_R " .. tostring(pl) .. "\n")
-            uart:write(tostring(pl) .. "\n")
+            suart:write(tostring(pl) .. "\n")
         end)
-    end)
-    uart:on("data", 1, function(data)
-        print("SUART_R " .. data)
-        if global_sck ~= nil then
-            print("SUART_S " .. data)
-            global_sck:send(tostring(data))
-        end
     end)
 end
 
