@@ -1,5 +1,4 @@
 ---@diagnostic disable: lowercase-global
----@diagnostic disable: undefined-global
 
 -- Utilitaires
 --- Split on tokens
@@ -20,7 +19,7 @@ end
 ---@param value any
 ---@return any|nil
 function get_key_for_value(t, value)
-    for k, v in ipairs(t) do
+    for k, v in pairs(t) do
         if v == value then
             return k
         end
@@ -33,4 +32,10 @@ end
 ---@param Start string
 function startswith(String, Start)
     return string.sub(String, 1, string.len(Start)) == Start
+end
+
+--- Arrondir un nombre
+---@param num number
+function round(num)
+    return num + (2^52 + 2^51) - (2^52 + 2^51)
 end

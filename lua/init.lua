@@ -1,3 +1,5 @@
+---@diagnostic disable: lowercase-global
+
 --- Empêche un éventuel bootloop en cas de problème avec le script
 local file = require "file"
 local tmr = require "tmr"
@@ -33,8 +35,8 @@ function wifi_init()
     wifi.setphymode(wifi.PHYMODE_B)
     -- Configuration
     wifi.ap.config({
-        ssid = "Rubisoft",
-        pwd = "Rubisoft",
+        ssid = WIFI_SSID,
+        pwd = WIFI_PWD,
         auth = wifi.WPA2_PSK
     })
 end

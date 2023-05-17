@@ -13,7 +13,6 @@
 // Uncomment and comment RELEASE to use the USB Port
 // #define DEBUG
 #define RELEASE
-
 // #define FLOAT_SPF
 
 const int IN1 = 8;
@@ -75,9 +74,7 @@ void parse() {
             // setStep (1)
             // setZero (2)
             // setSpeed (3)
-            // getPos (4)
-            // getMov (5)
-            ctrl_commande = constrain(ctrl_commande, 0, 5);
+            ctrl_commande = constrain(ctrl_commande, 0, 3);
             // Contraindre l'angle
             ctrl_angle = constrain(ctrl_angle, -359.0, 359.0);
             if (ctrl_angle < 0.0) {
@@ -98,7 +95,7 @@ void parse() {
     }
 
 void setPos() {
-    int shifted_steps_dest, ctrl_angle_steps, steps_to_move, oneeighty;
+    int shifted_steps_dest, ctrl_angle_steps, oneeighty;
     if (ctrl_angle != 0) {
         // Conversion en steps
         ctrl_angle_steps = round(ctrl_angle * STEPS_PER_DEG);
@@ -118,7 +115,7 @@ void setPos() {
             // Trouve le cadran de la position
             if (oneeighty > pos_steps) {
                 if (ctrl_angle_steps > oneeighty) {
-                    shifted_steps_dest = -((2048 - ctrl_angle_steps) + pos_steps);
+                    shifted_steps_dest = -((STEPS_PER_REV - ctrl_angle_steps) + pos_steps);
                 }
                 else {
                     shifted_steps_dest = ctrl_angle_steps - pos_steps;
@@ -127,7 +124,7 @@ void setPos() {
             else {
                 // Cadran opposé
                 if (ctrl_angle_steps < oneeighty) {
-                    shifted_steps_dest = (2048 - pos_steps) + ctrl_angle_steps;
+                    shifted_steps_dest = (STEPS_PER_REV - pos_steps) + ctrl_angle_steps;
                 }
                 else {
                     shifted_steps_dest = ctrl_angle_steps - pos_steps;
@@ -163,39 +160,7 @@ void setSpeed() {
     StepperMotor.setSpeed(ctrl_vitesse);
 }
 
-void getPos() {
-    char sentBuf[MAXLEN];
-    byte writeBuf[14];
-    char floatBuf[MAXLEN];
-    String printString;
-    pos_deg = (pos_steps > 0) ? pos_steps / STEPS_PER_DEG : 0.0;
-    // Printf Arduino ne supporte pas les floats
-#ifdef FLOAT_SPF
-    snprintf(sentBuf, sizeof(sentBuf), "%d,%03.1f,%04d\n", ctrl_commande, pos_deg, pos_steps);
-#else
-    dtostrf(pos_deg, 5, 1, floatBuf);
-    snprintf(sentBuf, sizeof(sentBuf), "%d,%s,%04dE", ctrl_commande, floatBuf, pos_steps);
-#endif
-    printString = String(sentBuf);
-    printString.replace(" ", "0");
-    printString.getBytes(writeBuf, printString.length() + 1);
-#ifndef RELEASE
-    Serial.println(printString);
-#else
-    // Serial.write(writeBuf, sizeof(writeBuf));
-    // Serial1.write(writeBuf, sizeof(writeBuf));
-    Serial.print(printString);
-    Serial1.print(printString);
-#endif
-}
-
-void getMov() {
-    char sentBuf[MAXLEN];
-    String printString;
-    sprintf(sentBuf, "%04d", moving);
-    printString = String(sentBuf);
-    Serial1.println(printString);
-}
+// Toutes les commandes get* sont disponibles dans l'historique de la repo
 
 // Modifie la variable moving et step
 void variable_plus_step(int steps) {
@@ -234,12 +199,6 @@ void loop() {
             break;
         case 3:
             setSpeed();
-            break;
-        case 4:
-            // getPos();
-            break;
-        case 5:
-            // getMov();
             break;
         }
         command_changed = 0;

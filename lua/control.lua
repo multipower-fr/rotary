@@ -4,14 +4,34 @@ dofile("utils.lua")
 -- Initialiser
 
 -- Port TCP utilise pour le socket
+---@type number
 tcp_port = 1234
 
 -- TX et RX pour l'UART Arduino
+---@type number|nil
 TX, RX = 2, nil
 
-to_send_fifo = (require "fifo").new()
+-- Steps per rev du moteur
+---@type integer
+STEPS_PER_REV = 2048
+
 local net = require "net"
 local softuart = require "softuart"
+
+MOTOR = {
+    -- Steps per rev du moteur
+    ---@type integer
+    steps_per_rev = STEPS_PER_REV,
+    -- Nombre de steps par degres
+    ---@type number
+    steps_per_deg = STEPS_PER_REV / 360.0,
+    -- Position en degrees
+    ---@type number
+    pos_deg = 0.0,
+    -- Position en steps
+    ---@type integer
+    pos_steps = 0
+}
 
 -- Classe pour le parser de commande
 CommandParser = {
@@ -23,9 +43,7 @@ CommandParser = {
         setZero = 2,
         setSpeed = 3,
         getPos = 4,
-        getMov = 5,
-        verFirCom = -1,
-        verFirMot = -2
+        verFirCom = -1
     },
     -- Commmande selectionnee
     ---@type table
@@ -46,10 +64,10 @@ CommandParser = {
     constraints = {
         -- Commande max degres
         ---@type number
-        pos_deg = 360,
+        ctrl_angle = 360,
         -- Vitesse max
         ---@type number
-        speed = 15
+        ctrl_speed = 15
     }
 }
 
@@ -76,6 +94,7 @@ function CommandParser:receive()
         name = "err",
         value = -3
     }
+    -- Iterer dans la table commands pour verifier sa validite
     for name, value in pairs(self.commands) do
         if string.find(self.payload, tostring(name)) ~= nil then
             self.ran_command = {
@@ -114,7 +133,6 @@ function CommandParser:extract_args()
 end
 
 --- Repondre a la demande de version
---- TODO: version ARDUINO
 function CommandParser:parse_ver()
     self.suart_command = nil
     ---@type string
@@ -126,9 +144,54 @@ function CommandParser:setPos()
     -- Les tableaux commencent a l'index 1
     -- Position de destination
     ---@type number|nil
-    local pos_deg = tonumber(split(self.payload, ";")[2]) or nil
-    if pos_deg ~= nil or pos_deg < self.constraints["pos_deg"] then
-        self.suart_command = string.format("%d,%.1f,0,0", self.ran_command["value"], pos_deg)
+    local ctrl_angle = tonumber(split(self.payload, ";")[2]) or nil
+    local shifted_steps_dest = 0
+    local function calc()
+        local ctrl_angle_steps, oneeighty
+        if ctrl_angle ~= 0 then
+            -- Conversion en steps de la commande
+            ctrl_angle_steps = round(ctrl_angle * MOTOR["steps_per_deg"])
+            -- Si le moteur est encore a sa position initiale
+            if MOTOR["pos_steps"] == 0 then
+                if ctrl_angle > 180 then
+                    shifted_steps_dest = -(MOTOR["steps_per_rev"] - ctrl_angle_steps)
+                else
+                    shifted_steps_dest = ctrl_angle_steps
+                end
+            else
+                -- Trouver le cadran de la commande
+                oneeighty = (MOTOR["pos_steps"] < MOTOR["steps_per_rev"] / 2 and
+                                {MOTOR["pos_steps"] + (MOTOR["steps_per_rev"] / 2)} or
+                                {MOTOR["pos_steps"] - (MOTOR["steps_per_rev"] / 2)})[1]
+                if oneeighty > MOTOR["pos_steps"] then
+                    if ctrl_angle_steps > oneeighty then
+                        shifted_steps_dest = -((MOTOR["steps_per_rev"] - ctrl_angle_steps) + MOTOR["pos_steps"])
+                    else
+                        shifted_steps_dest = ctrl_angle_steps - MOTOR["pos_steps"]
+                    end
+                else
+                    if ctrl_angle_steps < oneeighty then
+                        shifted_steps_dest = (MOTOR["steps_per_rev"] - MOTOR["pos_steps"]) + ctrl_angle_steps
+                    else
+                        shifted_steps_dest = ctrl_angle_steps - MOTOR["pos_steps"]
+                    end
+                end
+            end
+            MOTOR["pos_steps"] = ctrl_angle_steps
+        else
+            -- Retour a 0
+            if math.abs(MOTOR["pos_steps"]) < math.abs(MOTOR["steps_per_rev"] - MOTOR["pos_steps"]) then
+                shifted_steps_dest = -MOTOR["pos_steps"]
+            else
+                shifted_steps_dest = math.abs(MOTOR["steps_per_rev"] - MOTOR["pos_steps"])
+            end
+            MOTOR["pos_steps"] = 0
+        end
+
+    end
+    if ctrl_angle ~= nil or ctrl_angle < self.constraints["ctrl_angle"] then
+        calc()
+        self.suart_command = string.format("1,0.0,0,%d", shifted_steps_dest)
         self.return_message = string.format("%sACK", self.ran_command["name"])
         self.err = false
     else
@@ -144,33 +207,49 @@ function CommandParser:setStep()
     ---@type number|nil
     -- Commande de step.
     -- Les tableaux commencent a l'index 1
-    local step = tonumber(split(self.payload, ";")[2]) or nil
-    if step ~= nil then
-        self.suart_command = string.format("%d,0.0,0,%d", self.ran_command["value"], step)
-        self.return_message = string.format("%sACK", self.ran_command["name"])
-        self.err = false
-    else
-        self.suart_command = nil
-        self.return_message = string.format("%sERR", self.ran_command["name"])
-        self.err = true
-        return
+    local ctrl_steps = tonumber(split(self.payload, ";")[2]) or nil
+    local next_pos = nil
+    local function calc()
+        next_pos = MOTOR["pos_steps"] + ctrl_steps
+        if next_pos >= MOTOR["steps_per_rev"] then
+            next_pos = next_pos - MOTOR["steps_per_rev"]
+        end
+        MOTOR["pos_steps"] = next_pos
+    end
+    local function comm()
+        if ctrl_steps ~= nil then
+            self.suart_command = string.format("%d,0.0,0,%d", self.ran_command["value"], ctrl_steps)
+            self.return_message = string.format("%sACK", self.ran_command["name"])
+            self.err = false
+        else
+            self.suart_command = nil
+            self.return_message = string.format("%sERR", self.ran_command["name"])
+            self.err = true
+            return
+        end
+    end
+    if ctrl_steps ~= nil then
+        calc()
+        comm()
     end
 end
 
 --- Assumer que le 0 est a la position actuelle
 ---@return nil
 function CommandParser:setZero()
-    self.suart_command = string.format("%d,0.0,0,0", self.ran_command["value"])
+    self.suart_command = nil
     self.return_message = string.format("%sACK", self.ran_command["name"])
+    MOTOR["pos_deg"], MOTOR["pos_steps"] = 0.0, 0
 end
 
 --- Vitesse de rotation des prochaines commandes
 ---@return nil
 function CommandParser:setSpeed()
+    -- Commande de vitesse
     ---@type number|nil
-    local speed = tonumber(split(self.payload, ";")[2]) or nil
-    if speed ~= nil or speed <= self.constraints["speed"] then
-        self.suart_command = string.format("%d,0.0,%d,0", self.ran_command["value"], speed)
+    local ctrl_speed = tonumber(split(self.payload, ";")[2]) or nil
+    if ctrl_speed ~= nil and ctrl_speed <= self.constraints["ctrl_speed"] and ctrl_speed > 0 then
+        self.suart_command = string.format("%d,0.0,%d,0", self.ran_command["value"], ctrl_speed)
         self.return_message = string.format("%sACK", self.ran_command["name"])
         self.err = false
     else
@@ -180,22 +259,18 @@ function CommandParser:setSpeed()
     end
 end
 
---[=====[
---- TODO: Joindre ACK avec valeur
---- Récupérer la position
+--- Recuperer la position
 function CommandParser:getPos()
-    print(string.format("%d,0.0,0,0\n", self.ran_command["value"]))
-    suart:write(string.format("%d,0.0,0,0\n", self.ran_command["value"]))
+    local function calc()
+        -- Prevoir le cas eventuel ou pos_steps est negatif
+        MOTOR["pos_deg"] = (MOTOR["pos_steps"] > 0 and {MOTOR["pos_steps"] / MOTOR["steps_per_deg"]} or {0})[1]
+    end
+    calc()
     self.suart_command = nil
-    self.return_message = nil
+    self.return_message = string.format("%sACK;%.1f;%d", self.ran_command["name"], MOTOR["pos_deg"], MOTOR["pos_steps"])
 end
 
-function CommandParser:getMov()
-    suart:write(string.format("%d,0.0,0,0\n", self.ran_command["value"]))
-    self.suart_command = nil
-    self.return_message = nil
-end
-
+--[=====[
 --- Fonction callback a la reception TCP
 ---@param sck any
 ---@param payload string
@@ -249,21 +324,20 @@ end
 --- Open the TCP socket on port tcp_port
 function open()
     -- Variables d'initialisation
-    local server = net.createServer(net.TCP, 360)
+    local server = net.createServer(net.TCP, 28800)
     suart = softuart.setup(9600, TX, RX)
 
-    print("Established")
+    print("Established on IP 192.168.4.1:" .. tcp_port)
     -- Initier le callback
     server:listen(tcp_port, function(sck)
         sck:on("receive", function(sock, payload)
-            print(payload)
             -- Initialiser le parser de commandes
             cp = CommandParser:new(nil, payload)
             -- Si la commande est -3, une commande inconnue a ete passee
             if cp:receive()["value"] == -3 then
                 sock:send("ERR")
                 return true
-            end 
+            end
             local return_packet = cp:extract_args()
             if return_packet["error"] or return_packet["suart_command"] == nil then
                 sock:send(return_packet["return_message"])
@@ -276,23 +350,4 @@ function open()
     end)
 end
 
---- Initialiser la connexion serie de controle
----@return nil
-function serial_init()
-    -- RX1 ARDUINO <-> PIN 5 CARTE COMM
-    -- TX1 ARDUINO <-> PIN 4 CARTE COMM
-    suart = softuart.setup(9600, TX, RX)
-    suart:on("data", 13, function(data)
-        if startswith(data, tostring(4)) then
-            local cmd_name = "getPos"
-            print(data)
-            pos_recieved = true
-            pos_deg = tonumber(split(data, ",")[1])
-            pos_steps = tonumber(split(data, ",")[2])
-            to_send_fifo:queue(string.format("%sACK;%.1f;%d", cmd_name, pos_deg, pos_steps))
-        end
-    end)
-end
-
--- serial_init()
 open()
