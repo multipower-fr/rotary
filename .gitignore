@@ -3,3 +3,5 @@ arduino/build/
 .vscode/*
 !.vscode/arduino.json
 lua/credentials.lua
+rf/signal_hound_sdk
+rf/bbdevice/*

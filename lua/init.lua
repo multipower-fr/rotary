@@ -15,6 +15,7 @@ function startup()
         file.close("init.lua")
         -- the actual application is stored in 'application.lua'
         if file.open("test.lua") == nil then
+            print("Control.lua")
             dofile("control.lua")
         else
             -- dofile("test.lua")
